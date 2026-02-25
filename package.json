@@ -1,0 +1,14 @@
+{
+    "name": "nativephp-mobile-lab",
+    "private": true,
+    "scripts": {
+        "lab:up": "docker compose up -d backend-api",
+        "lab:down": "docker compose down",
+        "lab:logs": "docker compose logs -f backend-api mobile-web",
+        "lab:mobile:web": "docker compose up mobile-web",
+        "lab:mobile:doctor": "node scripts/mobile-doctor.mjs",
+        "lab:mobile:jump:android": "node scripts/lab.mjs jump-android",
+        "lab:mobile:jump:ios": "node scripts/lab.mjs jump-ios",
+        "lab:mobile:run:android": "node scripts/lab.mjs run-android"
+    }
+}

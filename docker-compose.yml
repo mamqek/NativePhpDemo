@@ -1,0 +1,58 @@
+name: nativephp-mobile-lab
+
+services:
+  backend-api:
+    build:
+      context: .
+      dockerfile: docker/backend-api/Dockerfile
+    working_dir: /workspace/backend-api
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:${LAB_API_PORT:-8000}
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /workspace/backend-api/database/database.sqlite
+      CORS_ALLOWED_ORIGINS: "*"
+      COMPOSER_ALLOW_SUPERUSER: "1"
+    volumes:
+      - ./backend-api:/workspace/backend-api
+      - backend_api_vendor:/workspace/backend-api/vendor
+      - backend_api_storage:/workspace/backend-api/storage
+      - backend_api_bootstrap_cache:/workspace/backend-api/bootstrap/cache
+    ports:
+      - "${LAB_API_PORT:-8000}:8000"
+    command: ["/bin/sh", "/usr/local/bin/backend-entrypoint.sh"]
+
+  mobile-web:
+    build:
+      context: .
+      dockerfile: docker/mobile-web/Dockerfile
+    working_dir: /workspace/mobile-app
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8080
+      VITE_API_BASE_URL: http://localhost:${LAB_API_PORT:-8000}/api/v1
+      VITE_ALLOW_GUEST_MODE: "${VITE_ALLOW_GUEST_MODE:-true}"
+      COMPOSER_ALLOW_SUPERUSER: "1"
+    volumes:
+      - ./mobile-app:/workspace/mobile-app
+      - mobile_app_vendor:/workspace/mobile-app/vendor
+      - mobile_app_node_modules:/workspace/mobile-app/node_modules
+      - mobile_app_storage:/workspace/mobile-app/storage
+      - mobile_app_bootstrap_cache:/workspace/mobile-app/bootstrap/cache
+    ports:
+      - "8080:8080"
+      - "${LAB_WEB_PORT:-5173}:5173"
+    depends_on:
+      - backend-api
+    command: ["/bin/sh", "/usr/local/bin/mobile-web-entrypoint.sh"]
+
+volumes:
+  backend_api_vendor:
+  backend_api_storage:
+  backend_api_bootstrap_cache:
+  mobile_app_vendor:
+  mobile_app_node_modules:
+  mobile_app_storage:
+  mobile_app_bootstrap_cache:
