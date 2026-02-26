@@ -24,10 +24,13 @@ Run these from `nativephp-mobile-lab`:
 ```bash
 npm run lab:up
 npm run lab:mobile:web
+npm run lab:mobile:web:up
 npm run lab:mobile:doctor
 npm run lab:mobile:jump:android
 npm run lab:mobile:jump:ios
 npm run lab:mobile:run:android
+npm run lab:mobile:jump:android:docker
+npm run lab:mobile:jump:ios:docker
 npm run lab:logs
 npm run lab:down
 ```
@@ -63,10 +66,32 @@ Dry-run wrappers (without launching NativePHP):
 - `node scripts/lab.mjs jump-ios --dry-run`
 - `node scripts/lab.mjs run-android --dry-run`
 
+Container-based dry-run wrappers (without launching NativePHP):
+
+- `node scripts/lab-docker-jump.mjs android --dry-run`
+- `node scripts/lab-docker-jump.mjs ios --dry-run`
+
 IP source:
 
 1. `NATIVEPHP_HOST_IP` (if set)
 2. Auto-detected non-loopback IPv4
+
+## Container-Only Jump (No Host PHP)
+
+If you want to share a test-ready setup and avoid installing PHP on the host, you can run Jump from the
+`mobile-web` container.
+
+1. Start services (detached):
+   - `npm run lab:up`
+   - `npm run lab:mobile:web:up`
+2. Start Jump from container:
+   - Android: `npm run lab:mobile:jump:android:docker`
+   - iOS: `npm run lab:mobile:jump:ios:docker`
+
+Notes:
+
+- Set `NATIVEPHP_HOST_IP` in root `.env` if auto-detection picks the wrong LAN IP.
+- `lab:mobile:doctor` is still host-side tooling validation (ADB/SDK/7-Zip) and is mainly for `native:run android`.
 
 ## Windows Notes
 

@@ -6,9 +6,12 @@
         "lab:down": "docker compose down",
         "lab:logs": "docker compose logs -f backend-api mobile-web",
         "lab:mobile:web": "docker compose up mobile-web",
+        "lab:mobile:web:up": "docker compose up -d mobile-web",
         "lab:mobile:doctor": "node scripts/mobile-doctor.mjs",
         "lab:mobile:jump:android": "node scripts/lab.mjs jump-android",
         "lab:mobile:jump:ios": "node scripts/lab.mjs jump-ios",
-        "lab:mobile:run:android": "node scripts/lab.mjs run-android"
+        "lab:mobile:run:android": "node scripts/lab.mjs run-android",
+        "lab:mobile:jump:android:docker": "node scripts/lab-docker-jump.mjs android",
+        "lab:mobile:jump:ios:docker": "node scripts/lab-docker-jump.mjs ios"
     }
 }
