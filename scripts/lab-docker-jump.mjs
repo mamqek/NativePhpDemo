@@ -109,6 +109,16 @@ function run(command, args, options = {}) {
     });
 }
 
+async function patchJumpRouterHostForwarding() {
+    const patchCmd =
+        "ROUTER_PATH=/workspace/mobile-app/vendor/nativephp/mobile/resources/jump/router.php; " +
+        'if [ -f "$ROUTER_PATH" ]; then ' +
+        `sed -i "s/'connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'host'/'connection', 'keep-alive', 'transfer-encoding', 'upgrade'/g" "$ROUTER_PATH"; ` +
+        'fi';
+
+    await run('docker', ['compose', 'exec', '-T', 'mobile-web', 'sh', '-lc', patchCmd]);
+}
+
 async function main() {
     const platform = process.argv[2];
     if (!platform || !['android', 'ios'].includes(platform)) {
@@ -116,14 +126,17 @@ async function main() {
         process.exit(1);
     }
 
+    const laravelPort = getConfig('NATIVEPHP_LARAVEL_PORT') || '8080';
     const ip = detectHostIp();
     if (!ip) {
         throw new Error('Unable to auto-detect host IP. Set NATIVEPHP_HOST_IP in nativephp-mobile-lab/.env.');
     }
 
     console.log(`Using Jump host IP: ${ip}`);
+    console.log(`Using Laravel proxy port: ${laravelPort}`);
 
     await run('docker', ['compose', 'ps', '--status', 'running', '--services', 'mobile-web']);
+    await patchJumpRouterHostForwarding();
     await run('docker', [
         'compose',
         'exec',
@@ -134,6 +147,7 @@ async function main() {
         'native:jump',
         platform,
         `--ip=${ip}`,
+        `--laravel-port=${laravelPort}`,
         '--no-interaction',
     ]);
 }

@@ -9,14 +9,19 @@ RUN apt-get update \
         curl \
         gnupg \
         git \
+        rsync \
         unzip \
         zip \
         libzip-dev \
+        libpng-dev \
+        libjpeg62-turbo-dev \
+        libfreetype6-dev \
         sqlite3 \
         libsqlite3-dev \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && docker-php-ext-install pdo pdo_sqlite zip \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install gd pdo pdo_sqlite zip \
     && npm install -g npm@latest \
     && rm -rf /var/lib/apt/lists/*
 
