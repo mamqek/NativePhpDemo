@@ -1,54 +1,21 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDuplicateEnvWarnings, parseEnvFileDetailed } from './env-utils.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, '..');
 const mobileAppDir = path.join(rootDir, 'mobile-app');
 const requiredMode = process.argv.includes('--required');
 
-function parseEnvFile(filePath) {
-    if (!fs.existsSync(filePath)) {
-        return {};
-    }
-
-    const env = {};
-    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) {
-            continue;
-        }
-
-        const idx = trimmed.indexOf('=');
-        if (idx === -1) {
-            continue;
-        }
-
-        const key = trimmed.slice(0, idx).trim();
-        let value = trimmed.slice(idx + 1).trim();
-
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
-        }
-
-        env[key] = value;
-    }
-
-    return env;
-}
-
-const rootEnv = parseEnvFile(path.join(rootDir, '.env'));
-const mobileEnv = parseEnvFile(path.join(mobileAppDir, '.env'));
+const rootEnv = parseEnvFileDetailed(path.join(rootDir, '.env'));
+const mobileEnv = parseEnvFileDetailed(path.join(mobileAppDir, '.env'));
 
 function getConfig(name) {
-    return process.env[name] || rootEnv[name] || mobileEnv[name] || '';
+    return process.env[name] || rootEnv.env[name] || mobileEnv.env[name] || '';
 }
 
 function pathExists(value) {
@@ -111,6 +78,74 @@ function isPhp83OrHigher(version) {
     return parsed.major === 8 && parsed.minor >= 3;
 }
 
+function isPrivateIpv4(address) {
+    return (
+        address.startsWith('10.')
+        || address.startsWith('192.168.')
+        || /^172\.(1[6-9]|2\d|3[0-1])\./.test(address)
+    );
+}
+
+function getPrivateIpv4Candidates() {
+    const candidates = [];
+
+    for (const [interfaceName, entries] of Object.entries(os.networkInterfaces())) {
+        for (const entry of entries || []) {
+            if (!entry || entry.family !== 'IPv4' || entry.internal) {
+                continue;
+            }
+
+            if (!isPrivateIpv4(entry.address)) {
+                continue;
+            }
+
+            candidates.push({
+                interfaceName,
+                address: entry.address,
+            });
+        }
+    }
+
+    return candidates;
+}
+
+function parsePort(value) {
+    const parsed = Number.parseInt(String(value), 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+        return null;
+    }
+
+    return parsed;
+}
+
+function checkPortAvailability(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+
+        server.once('error', () => {
+            resolve(false);
+        });
+
+        server.once('listening', () => {
+            server.close(() => resolve(true));
+        });
+
+        server.listen(port, '0.0.0.0');
+    });
+}
+
+async function scanJumpPorts(startPort = 3000, endPort = 3010) {
+    const occupancy = [];
+    for (let port = startPort; port <= endPort; port += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        const available = await checkPortAvailability(port);
+        occupancy.push({ port, available });
+    }
+
+    const selected = occupancy.find((entry) => entry.available)?.port || null;
+    return { occupancy, selected };
+}
+
 const results = [];
 
 function pass(name, details) {
@@ -125,7 +160,15 @@ function fail(name, details) {
     results.push({ level: 'FAIL', name, details });
 }
 
-function runChecks() {
+async function runChecks() {
+    for (const duplicateWarning of createDuplicateEnvWarnings('Root .env', rootEnv)) {
+        warn('Env Duplicates', duplicateWarning);
+    }
+
+    for (const duplicateWarning of createDuplicateEnvWarnings('mobile-app/.env', mobileEnv)) {
+        warn('Env Duplicates', duplicateWarning);
+    }
+
     const phpBinary = resolvePhpBinary();
     const phpVersion = checkCommand(phpBinary, ['-r', 'echo PHP_VERSION;'], { cwd: mobileAppDir });
 
@@ -159,8 +202,8 @@ function runChecks() {
     const sdkPath = getConfig('NATIVEPHP_ANDROID_SDK_LOCATION')
         || process.env.ANDROID_SDK_ROOT
         || process.env.ANDROID_HOME
-        || rootEnv.ANDROID_SDK_ROOT
-        || rootEnv.ANDROID_HOME;
+        || rootEnv.env.ANDROID_SDK_ROOT
+        || rootEnv.env.ANDROID_HOME;
 
     if (!sdkPath) {
         fail('Android SDK', 'No SDK path configured. Set NATIVEPHP_ANDROID_SDK_LOCATION or ANDROID_SDK_ROOT.');
@@ -195,8 +238,7 @@ function runChecks() {
     }
 
     if (process.platform === 'win32') {
-        const sevenZipPath =
-            getConfig('NATIVEPHP_7ZIP_LOCATION') || 'C:\\Program Files\\7-Zip\\7z.exe';
+        const sevenZipPath = getConfig('NATIVEPHP_7ZIP_LOCATION') || 'C:\\Program Files\\7-Zip\\7z.exe';
 
         if (pathExists(sevenZipPath)) {
             pass('7-Zip', sevenZipPath);
@@ -206,9 +248,54 @@ function runChecks() {
     } else {
         pass('7-Zip', 'Not required on non-Windows hosts for this workflow.');
     }
+
+    const privateIpCandidates = getPrivateIpv4Candidates();
+    const pinnedHostIp = getConfig('NATIVEPHP_HOST_IP');
+
+    if (privateIpCandidates.length > 1 && !pinnedHostIp) {
+        const candidatesText = privateIpCandidates
+            .map((candidate) => `${candidate.interfaceName}:${candidate.address}`)
+            .join(', ');
+        warn(
+            'Host IP Selection',
+            `Multiple private interfaces detected (${candidatesText}). Set NATIVEPHP_HOST_IP to avoid wrong adapter selection.`
+        );
+    } else if (privateIpCandidates.length === 0) {
+        warn('Host IP Selection', 'No private IPv4 interface detected for LAN Jump testing.');
+    } else {
+        const selected = pinnedHostIp || privateIpCandidates[0].address;
+        pass('Host IP Selection', `Current preferred host IP: ${selected}`);
+    }
+
+    const { occupancy, selected } = await scanJumpPorts(3000, 3010);
+    const occupancySummary = occupancy
+        .map((entry) => `${entry.port}:${entry.available ? 'free' : 'used'}`)
+        .join(', ');
+
+    if (!selected) {
+        fail('Jump Port', `No free ports available in 3000-3010. Occupancy: ${occupancySummary}`);
+    } else {
+        pass('Jump Port', `Selected port ${selected}. Occupancy: ${occupancySummary}`);
+    }
+
+    const configuredJumpPortRaw = getConfig('LAB_JUMP_HTTP_PORT');
+    if (configuredJumpPortRaw) {
+        const configuredJumpPort = parsePort(configuredJumpPortRaw);
+
+        if (!configuredJumpPort) {
+            warn('Jump Port Config', `LAB_JUMP_HTTP_PORT is invalid: ${configuredJumpPortRaw}`);
+        } else if (selected && configuredJumpPort !== selected) {
+            warn(
+                'Jump Port Config',
+                `LAB_JUMP_HTTP_PORT=${configuredJumpPort} but first free port is ${selected}.`
+            );
+        } else {
+            pass('Jump Port Config', `LAB_JUMP_HTTP_PORT=${configuredJumpPort}`);
+        }
+    }
 }
 
-runChecks();
+await runChecks();
 
 for (const entry of results) {
     console.log(`[${entry.level}] ${entry.name}: ${entry.details}`);

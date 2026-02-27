@@ -3,52 +3,26 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDuplicateEnvWarnings, parseEnvFileDetailed } from './env-utils.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, '..');
 const mobileAppDir = path.join(rootDir, 'mobile-app');
 const dryRun = process.argv.includes('--dry-run');
 
-function parseEnvFile(filePath) {
-    if (!fs.existsSync(filePath)) {
-        return {};
-    }
+const rootEnv = parseEnvFileDetailed(path.join(rootDir, '.env'));
+const mobileEnv = parseEnvFileDetailed(path.join(mobileAppDir, '.env'));
 
-    const env = {};
-    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) {
-            continue;
-        }
-
-        const idx = trimmed.indexOf('=');
-        if (idx === -1) {
-            continue;
-        }
-
-        const key = trimmed.slice(0, idx).trim();
-        let value = trimmed.slice(idx + 1).trim();
-
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
-        }
-
-        env[key] = value;
-    }
-
-    return env;
+for (const warning of createDuplicateEnvWarnings('Root .env', rootEnv)) {
+    console.warn(`[WARN] ${warning}`);
 }
 
-const rootEnv = parseEnvFile(path.join(rootDir, '.env'));
-const mobileEnv = parseEnvFile(path.join(mobileAppDir, '.env'));
+for (const warning of createDuplicateEnvWarnings('mobile-app/.env', mobileEnv)) {
+    console.warn(`[WARN] ${warning}`);
+}
 
 function getConfig(name) {
-    return process.env[name] || rootEnv[name] || mobileEnv[name] || '';
+    return process.env[name] || rootEnv.env[name] || mobileEnv.env[name] || '';
 }
 
 function pathExists(value) {
@@ -140,7 +114,7 @@ async function runJump(platform) {
     const ip = detectHostIp();
 
     if (!ip) {
-        throw new Error('Unable to auto-detect host IP. Set NATIVEPHP_HOST_IP in nativephp-mobile-lab/.env.');
+        throw new Error(`Unable to auto-detect host IP. Set NATIVEPHP_HOST_IP in ${path.join(rootDir, '.env')}.`);
     }
 
     console.log(`Using PHP binary: ${php}`);

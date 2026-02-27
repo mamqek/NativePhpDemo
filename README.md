@@ -19,7 +19,7 @@ Field Inspection Benchmark monorepo for evaluating **NativePHP Mobile** (Laravel
 
 ## Root Commands (Short Workflow)
 
-Run these from `nativephp-mobile-lab`:
+Run these from `mobile-fresh`:
 
 ```bash
 npm run lab:up
@@ -30,7 +30,10 @@ npm run lab:mobile:jump:android
 npm run lab:mobile:jump:ios
 npm run lab:mobile:run:android
 npm run lab:mobile:jump:android:docker
+npm run lab:mobile:jump:android:docker:manual
+npm run lab:mobile:jump:android:docker:usb
 npm run lab:mobile:jump:ios:docker
+npm run lab:mobile:jump:ios:docker:manual
 npm run lab:logs
 npm run lab:down
 ```
@@ -70,6 +73,8 @@ Container-based dry-run wrappers (without launching NativePHP):
 
 - `node scripts/lab-docker-jump.mjs android --dry-run`
 - `node scripts/lab-docker-jump.mjs ios --dry-run`
+- `node scripts/lab-docker-jump.mjs android --ip-mode=manual --dry-run`
+- `node scripts/lab-docker-jump.mjs android --usb --dry-run`
 
 IP source:
 
@@ -92,6 +97,28 @@ Notes:
 
 - Set `NATIVEPHP_HOST_IP` in root `.env` if auto-detection picks the wrong LAN IP.
 - `lab:mobile:doctor` is still host-side tooling validation (ADB/SDK/7-Zip) and is mainly for `native:run android`.
+
+## Docker Jump Hardening Notes
+
+Key updates made for reliable physical-device downloads:
+
+- Added robust Docker Jump options: `--ip`, `--ip-mode=auto|manual`, `--http-port`, `--usb`.
+- Added convenience scripts:
+  - `lab:mobile:jump:android:docker:manual`
+  - `lab:mobile:jump:android:docker:usb`
+  - `lab:mobile:jump:ios:docker:manual`
+- IP resolution now uses this order:
+  - explicit `--ip`
+  - pinned `NATIVEPHP_HOST_IP`
+  - USB mode (`127.0.0.1`)
+  - manual interface select
+  - auto-detect
+- Jump HTTP port now prefers `3000` and automatically falls back through `3010` if needed.
+- Docker compose is started with runtime `LAB_JUMP_HTTP_PORT`/`LAB_JUMP_WS_PORT` overrides to keep container mapping aligned with selected port.
+- Jump router Host-header forwarding patch is kept and now verified before starting Jump (fails fast if missing).
+- USB mode now validates `adb` and authorized devices, then applies `adb reverse` for Jump HTTP/WS ports.
+- `.env` parsing now warns on duplicate keys in root and `mobile-app/.env`, including empty duplicate overrides.
+- `lab:mobile:doctor` now reports duplicate `.env` keys, multi-interface host-IP risk, and port scan status for `3000..3010`.
 
 ## Windows Notes
 

@@ -12,6 +12,9 @@
         "lab:mobile:jump:ios": "node scripts/lab.mjs jump-ios",
         "lab:mobile:run:android": "node scripts/lab.mjs run-android",
         "lab:mobile:jump:android:docker": "node scripts/lab-docker-jump.mjs android",
-        "lab:mobile:jump:ios:docker": "node scripts/lab-docker-jump.mjs ios"
+        "lab:mobile:jump:android:docker:manual": "node scripts/lab-docker-jump.mjs android --ip-mode=manual",
+        "lab:mobile:jump:android:docker:usb": "node scripts/lab-docker-jump.mjs android --usb",
+        "lab:mobile:jump:ios:docker": "node scripts/lab-docker-jump.mjs ios",
+        "lab:mobile:jump:ios:docker:manual": "node scripts/lab-docker-jump.mjs ios --ip-mode=manual"
     }
 }

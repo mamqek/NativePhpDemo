@@ -1,8 +1,8 @@
-# NativePHP Mobile Lab - Fresh Device Start Guide
+# NativePHP Mobile Lab - Fresh Device Start Guide (mobile-fresh)
 
-This guide starts from a fresh clone and gives two paths:
+This guide starts from a fresh clone and provides:
 
-1. Container-only Jump testing (no host PHP install needed).
+1. Container-only Jump testing (no host PHP install required).
 2. Full Android native run (host tooling required).
 
 ## 0) Prerequisites
@@ -19,15 +19,15 @@ This guide starts from a fresh clone and gives two paths:
 ### Windows (PowerShell)
 ```powershell
 cd c:\Programming\NativePhpDemo
-git clone <your-repo-url> nativephp-mobile-lab
-cd .\nativephp-mobile-lab
+git clone <your-repo-url> mobile-fresh
+cd .\mobile-fresh
 ```
 
 ### Linux (bash)
 ```bash
 cd ~/Programming
-git clone <your-repo-url> nativephp-mobile-lab
-cd nativephp-mobile-lab
+git clone <your-repo-url> mobile-fresh
+cd mobile-fresh
 ```
 
 ## 2) Create `.env` files
@@ -44,11 +44,11 @@ cp .env.example .env
 cp mobile-app/.env.example mobile-app/.env
 ```
 
-## 3) Find your LAN IP and set API/Jump host
+## 3) Find LAN IP and set API/Jump host
 
 Why this matters:
 - `mobile-app/.env` needs `VITE_API_BASE_URL=http://<LAN_IP>:8000/api/v1`
-- Root `.env` can set `NATIVEPHP_HOST_IP=<LAN_IP>` for stable Jump routing
+- Root `.env` can pin `NATIVEPHP_HOST_IP=<LAN_IP>` for stable Jump routing
 
 ### Windows (PowerShell)
 ```powershell
@@ -83,43 +83,75 @@ grep '^NATIVEPHP_HOST_IP=' .env
 grep '^VITE_API_BASE_URL=' mobile-app/.env
 ```
 
-## 4) Path A (Recommended for testers): Container-only Jump
+## 4) Path A (Recommended): Container-only Jump
 
-Use this if you want to run and test without installing host `php`.
+Use this if you want to run and test without host `php`.
 
 ### 4.1 Start services
 
 ### Windows (PowerShell)
 ```powershell
-cd c:\Programming\NativePhpDemo\nativephp-mobile-lab
+cd c:\Programming\NativePhpDemo\mobile-fresh
 npm run lab:up
 npm run lab:mobile:web:up
 ```
 
 ### Linux (bash)
 ```bash
-cd ~/Programming/nativephp-mobile-lab
+cd ~/Programming/mobile-fresh
 npm run lab:up
 npm run lab:mobile:web:up
 ```
 
-### 4.2 Start Jump session
+### 4.2 Run doctor
 
-### Windows (PowerShell)
-```powershell
-npm run lab:mobile:jump:android:docker
-# or
-npm run lab:mobile:jump:ios:docker
+### Windows / Linux
+```bash
+npm run lab:mobile:doctor
 ```
 
-### Linux (bash)
+### 4.3 Start Jump (LAN, default auto IP)
+
+### Windows / Linux
 ```bash
 npm run lab:mobile:jump:android:docker
 # or
 npm run lab:mobile:jump:ios:docker
 ```
 
-## 5) Path B: Full Android native run (host-native build path)
+What the command prints now:
+- selected host IP and source (`--ip`, pinned env, manual, or auto)
+- selected Jump port (tries `3000`, then `3001..3010`)
+- QR page URL for PC
+- phone connectivity URLs
+
+### 4.4 Optional modes
+
+Manual interface/IP selection:
+```bash
+npm run lab:mobile:jump:android:docker:manual
+# or
+npm run lab:mobile:jump:ios:docker:manual
+```
+
+Android USB fallback (`adb reverse`, uses `127.0.0.1` in QR payload):
+```bash
+npm run lab:mobile:jump:android:docker:usb
+```
+
+### 4.5 Connectivity verification (LAN mode)
+
+Before scanning in Jump app, confirm from phone browser (same Wi-Fi):
+- `http://<JUMP_IP>:<JUMP_PORT>/jump/info`
+- `http://<JUMP_IP>:<JUMP_PORT>/jump/download`
+
+Expected:
+- `/jump/info` returns JSON
+- `/jump/download` starts `app.zip` download
+
+If these fail, Jump app scan/download will also fail.
+
+## 5) Path B: Full Android native run (host-native)
 
 Use this if you need full `native:run android`, not just Jump.
 
@@ -127,7 +159,7 @@ Use this if you need full `native:run android`, not just Jump.
 
 ### Windows (PowerShell)
 ```powershell
-cd c:\Programming\NativePhpDemo\nativephp-mobile-lab\mobile-app
+cd c:\Programming\NativePhpDemo\mobile-fresh\mobile-app
 & ..\.tools\php83\php.exe ..\.tools\composer.phar install
 npm install
 & ..\.tools\php83\php.exe artisan key:generate --force
@@ -136,7 +168,7 @@ npm install
 
 ### Linux (bash)
 ```bash
-cd ~/Programming/nativephp-mobile-lab/mobile-app
+cd ~/Programming/mobile-fresh/mobile-app
 composer install
 npm install
 php artisan key:generate --force
@@ -145,58 +177,31 @@ php artisan migrate --force
 
 ### 5.2 Start services and run doctor
 
-### Windows (PowerShell)
-```powershell
-cd c:\Programming\NativePhpDemo\nativephp-mobile-lab
-npm run lab:mobile:web:up
-npm run lab:mobile:doctor
-```
-
-### Linux (bash)
+### Windows / Linux
 ```bash
-cd ~/Programming/nativephp-mobile-lab
+cd <repo-root>
 npm run lab:mobile:web:up
 npm run lab:mobile:doctor
 ```
 
 ### 5.3 Run Android app
 
-### Windows (PowerShell)
-```powershell
-npm run lab:mobile:run:android
-```
-
-### Linux (bash)
+### Windows / Linux
 ```bash
 npm run lab:mobile:run:android
 ```
 
 ## 6) Web-only preview (no Jump, no native run)
 
-### Windows (PowerShell)
-```powershell
-cd c:\Programming\NativePhpDemo\nativephp-mobile-lab
-npm run lab:mobile:web
-```
-
-### Linux (bash)
+### Windows / Linux
 ```bash
-cd ~/Programming/nativephp-mobile-lab
 npm run lab:mobile:web
 ```
 
 ## 7) Logs and shutdown
 
-### Windows (PowerShell)
-```powershell
-cd c:\Programming\NativePhpDemo\nativephp-mobile-lab
-npm run lab:logs
-npm run lab:down
-```
-
-### Linux (bash)
+### Windows / Linux
 ```bash
-cd ~/Programming/nativephp-mobile-lab
 npm run lab:logs
 npm run lab:down
 ```
@@ -204,5 +209,6 @@ npm run lab:down
 ## Notes
 
 - On Windows, local iOS build/package is out of scope; use iOS Jump for validation.
-- If IP auto-detect picks the wrong interface, set `NATIVEPHP_HOST_IP` manually in root `.env`.
-- If Docker is not running, `lab:mobile:*:docker` commands will fail until Docker starts.
+- If IP auto-detect picks the wrong adapter, use manual mode or set `NATIVEPHP_HOST_IP`.
+- If Docker is not running, `lab:mobile:*:docker` commands fail.
+- For Android USB fallback, device must be authorized in `adb devices`.
