@@ -1,0 +1,12 @@
+[2026-02-28T00:35:02.640Z] platform=android ip=192.168.178.233 httpPort=3000 wsPort=8081 laravelPort=8080
+[2026-02-28T00:35:02.642Z] command: docker compose exec -T mobile-web php artisan native:jump android --ip=192.168.178.233 --http-port=3000 --laravel-port=8080 --no-interaction
+
+ [46m[30m NativePHP Jump Server [39m[49m
+
+  Building assets for android ........................................ 6s DONE
+  Copying files ...................................................... 1s DONE
+  Creating zip archive ............................................... 4s DONE
+  Bundle created .................................................... 40.57 MB  
+  Server running ........................................ Press Ctrl+C to stop  
+  Device ..................................... SM-G996B downloading (40.57 MB)  
+  Device ............................... Unknown device downloading (40.57 MB)  

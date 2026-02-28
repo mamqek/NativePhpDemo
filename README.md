@@ -136,3 +136,86 @@ Key updates made for reliable physical-device downloads:
 - `docs/api-contract.md`
 - `docs/testing-matrix.md`
 - `docs/nativephp-vs-rn-checklist.md`
+
+## Last Setup Step: LAN Firewall Rules (Physical Device Testing)
+
+Why this is needed:
+
+- Jump QR/download uses host TCP ports (`3000` HTTP, `8081` WS) and API uses `8000`.
+- If `ping` works but `http://<host-ip>:3000` or `:8000` fails from phone, inbound TCP is being blocked.
+- Allow only your LAN subnet to keep exposure limited.
+
+### Windows (PowerShell, Run as Administrator)
+
+Create rules (LAN-scoped):
+
+```powershell
+New-NetFirewallRule -DisplayName "NativePHP LAN 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -RemoteAddress 192.168.178.0/24 -Profile Private
+New-NetFirewallRule -DisplayName "NativePHP LAN 3000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3000 -RemoteAddress 192.168.178.0/24 -Profile Private
+New-NetFirewallRule -DisplayName "NativePHP LAN 8081" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8081 -RemoteAddress 192.168.178.0/24 -Profile Private
+```
+
+Disable for testing:
+
+```powershell
+Disable-NetFirewallRule -DisplayName "NativePHP LAN 8000","NativePHP LAN 3000","NativePHP LAN 8081"
+```
+
+Enable again:
+
+```powershell
+Enable-NetFirewallRule -DisplayName "NativePHP LAN 8000","NativePHP LAN 3000","NativePHP LAN 8081"
+```
+
+Check status:
+
+```powershell
+Get-NetFirewallRule -DisplayName "NativePHP LAN *" | Format-Table DisplayName,Enabled,Profile,Direction,Action
+```
+
+### Linux (UFW)
+
+Enable (replace subnet if needed):
+
+```bash
+sudo ufw allow from 192.168.178.0/24 to any port 8000 proto tcp
+sudo ufw allow from 192.168.178.0/24 to any port 3000 proto tcp
+sudo ufw allow from 192.168.178.0/24 to any port 8081 proto tcp
+```
+
+Disable (remove rules):
+
+```bash
+sudo ufw delete allow from 192.168.178.0/24 to any port 8000 proto tcp
+sudo ufw delete allow from 192.168.178.0/24 to any port 3000 proto tcp
+sudo ufw delete allow from 192.168.178.0/24 to any port 8081 proto tcp
+```
+
+Check:
+
+```bash
+sudo ufw status verbose | grep -E '3000|8000|8081'
+```
+
+### macOS (pf anchor)
+
+Enable (replace subnet if needed):
+
+```bash
+cat <<'EOF' | sudo pfctl -a nativephp/jump -f -
+pass in inet proto tcp from 192.168.178.0/24 to any port {3000,8000,8081}
+EOF
+sudo pfctl -e
+```
+
+Disable:
+
+```bash
+sudo pfctl -a nativephp/jump -F rules
+```
+
+Check:
+
+```bash
+sudo pfctl -a nativephp/jump -s rules
+```

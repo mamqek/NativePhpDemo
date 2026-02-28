@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -156,6 +157,73 @@ function run(command, args, options = {}) {
 
         child.on('error', reject);
         child.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+                return;
+            }
+
+            reject(new Error(`Command failed (${command} ${args.join(' ')}), exit code ${code}`));
+        });
+    });
+}
+
+function ensureParentDirectory(filePath) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+
+function getJumpLogPath(platform) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return path.join(rootDir, 'logs', `jump-${platform}-${stamp}.log`);
+}
+
+function runWithLog(command, args, options = {}) {
+    const { logFilePath } = options;
+    if (!logFilePath) {
+        return run(command, args, options);
+    }
+
+    if (dryRun) {
+        console.log(`[dry-run] log ${logFilePath}`);
+        console.log(`[dry-run] cwd=${options.cwd || rootDir}`);
+        if (options.env && Object.keys(options.env).length > 0) {
+            const envSummary = Object.entries(options.env)
+                .map(([key, value]) => `${key}=${value}`)
+                .join(' ');
+            console.log(`[dry-run] env ${envSummary}`);
+        }
+        console.log(`[dry-run] ${command} ${args.join(' ')}`);
+        return Promise.resolve();
+    }
+
+    ensureParentDirectory(logFilePath);
+    const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
+    logStream.write(`[${new Date().toISOString()}] command: ${command} ${args.join(' ')}\n`);
+
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            cwd: options.cwd || rootDir,
+            env: { ...process.env, ...options.env },
+            shell: false,
+        });
+
+        child.stdout.on('data', (chunk) => {
+            process.stdout.write(chunk);
+            logStream.write(chunk);
+        });
+
+        child.stderr.on('data', (chunk) => {
+            process.stderr.write(chunk);
+            logStream.write(chunk);
+        });
+
+        child.on('error', (error) => {
+            logStream.end();
+            reject(error);
+        });
+
+        child.on('close', (code) => {
+            logStream.end();
             if (code === 0) {
                 resolve();
                 return;
@@ -434,60 +502,6 @@ async function selectJumpPort(explicitPort) {
     throw new Error('No free host ports available in range 3000-3010 for Jump HTTP server.');
 }
 
-async function isContainerPortAvailable(port) {
-    if (dryRun) {
-        return true;
-    }
-
-    const probeScript =
-        '$port=(int)$argv[1]; '
-        + '$socket=@stream_socket_server("tcp://0.0.0.0:".$port,$errno,$errstr); '
-        + 'if($socket){fclose($socket); echo "free"; exit(0);} '
-        + 'echo "used"; exit(0);';
-
-    const result = await runCapture('docker', [
-        'compose',
-        'exec',
-        '-T',
-        'mobile-web',
-        'php',
-        '-r',
-        probeScript,
-        '--',
-        String(port),
-    ]);
-
-    return result.stdout.trim() === 'free';
-}
-
-async function selectContainerJumpPort(basePort, explicitPort) {
-    if (explicitPort) {
-        const explicit = parsePort(explicitPort);
-        if (!explicit) {
-            throw new Error(`Invalid --http-port value: ${explicitPort}`);
-        }
-
-        const explicitAvailable = await isContainerPortAvailable(explicit);
-        if (!explicitAvailable) {
-            throw new Error(
-                `Requested --http-port=${explicit} is busy inside container. Stop previous Jump session or choose another port.`
-            );
-        }
-
-        return explicit;
-    }
-
-    for (let port = basePort; port <= 3010; port += 1) {
-        // eslint-disable-next-line no-await-in-loop
-        const available = await isContainerPortAvailable(port);
-        if (available) {
-            return port;
-        }
-    }
-
-    throw new Error(`No free container ports available in range ${basePort}-3010 for Jump HTTP server.`);
-}
-
 async function ensureDockerServices(httpPort, wsPort) {
     const envOverride = {
         LAB_JUMP_HTTP_PORT: String(httpPort),
@@ -634,11 +648,10 @@ async function main() {
     const laravelPort = 8080;
     const wsPort = parsePort(getConfig('LAB_JUMP_WS_PORT') || getConfig('NATIVEPHP_WS_PORT') || '8081') || 8081;
 
-    const baseJumpPort = await selectJumpPort(options.httpPort);
+    const jumpHttpPort = await selectJumpPort(options.httpPort);
     const { ip: hostIp, source: hostIpSource } = await resolveHostIp(options);
 
-    await ensureDockerServices(baseJumpPort, wsPort);
-    const jumpHttpPort = await selectContainerJumpPort(baseJumpPort, options.httpPort);
+    await ensureDockerServices(jumpHttpPort, wsPort);
     await patchJumpRouterHostForwarding();
     await verifyJumpRouterHostForwarding();
 
@@ -646,9 +659,14 @@ async function main() {
         await setupUsbReverse(jumpHttpPort, wsPort);
     }
 
-    if (jumpHttpPort !== baseJumpPort) {
-        console.warn(
-            `[WARN] Port ${baseJumpPort} is busy inside container. Using next free Jump port ${jumpHttpPort}.`
+    const jumpLogPath = getJumpLogPath(platform);
+    console.log(`Jump log file: ${jumpLogPath}`);
+
+    if (!dryRun) {
+        ensureParentDirectory(jumpLogPath);
+        fs.appendFileSync(
+            jumpLogPath,
+            `[${new Date().toISOString()}] platform=${platform} ip=${hostIp} httpPort=${jumpHttpPort} wsPort=${wsPort} laravelPort=${laravelPort}\n`
         );
     }
 
@@ -660,7 +678,7 @@ async function main() {
         usbMode: options.usb,
     });
 
-    await run('docker', [
+    await runWithLog('docker', [
         'compose',
         'exec',
         '-T',
@@ -673,7 +691,7 @@ async function main() {
         `--http-port=${jumpHttpPort}`,
         `--laravel-port=${laravelPort}`,
         '--no-interaction',
-    ]);
+    ], { logFilePath: jumpLogPath });
 }
 
 main().catch((error) => {
